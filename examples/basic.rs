@@ -12,23 +12,24 @@ use futures::executor::block_on;
 
 fn run(event_loop: EventLoop<()>, window: Window) {
     let size = window.inner_size();
-    let surface = wgpu::Surface::create(&window);
+    let instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY);
+    let surface = unsafe { instance.create_surface(&window) };
 
-    let adapter = block_on(wgpu::Adapter::request(
-        &wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::HighPerformance,
-            compatible_surface: Some(&surface),
-        },
-        wgpu::BackendBit::PRIMARY,
-    ))
+    let adapter = block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+        power_preference: wgpu::PowerPreference::HighPerformance,
+        compatible_surface: Some(&surface),
+    }))
     .unwrap();
 
-    let (device, queue) = block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-        extensions: wgpu::Extensions {
-            anisotropic_filtering: false,
+    let (device, queue) = block_on(adapter.request_device(
+        &wgpu::DeviceDescriptor {
+            features: wgpu::Features::MAPPABLE_PRIMARY_BUFFERS,
+            limits: wgpu::Limits::default(),
+            shader_validation: true,
         },
-        limits: wgpu::Limits::default(),
-    }));
+        None,
+    ))
+    .unwrap();
 
     let mut renderer = Chroma::new(
         &device,
@@ -79,13 +80,19 @@ fn run(event_loop: EventLoop<()>, window: Window) {
                 ..
             } => *control_flow = ControlFlow::Exit,
             Event::RedrawRequested(..) => {
-                let frame = swap_chain
-                    .get_next_texture()
-                    .expect("Timeout when acquiring next swap chain texture");
+                let frame = match swap_chain.get_current_frame() {
+                    Ok(frame) => frame,
+                    Err(_) => {
+                        swap_chain = device.create_swap_chain(&surface, &sc_desc);
+                        swap_chain
+                            .get_current_frame()
+                            .expect("Failed to get next swapchain texture!")
+                    }
+                };
 
-                let commands = block_on(renderer.render(&device, &frame.view));
+                let commands = block_on(renderer.render(&device, &frame.output.view));
 
-                queue.submit(&[commands]);
+                queue.submit(Some(commands));
             }
             _ => {}
         }

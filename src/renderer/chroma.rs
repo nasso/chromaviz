@@ -27,29 +27,30 @@ pub struct Chroma {
 
 impl Chroma {
     pub fn new(device: &wgpu::Device, settings: ChromaSettings) -> Self {
-        let vs = include_bytes!("shaders/shader.vert.spv");
         let vs_module =
-            device.create_shader_module(&wgpu::read_spirv(std::io::Cursor::new(&vs[..])).unwrap());
+            device.create_shader_module(wgpu::include_spirv!("shaders/shader.vert.spv"));
 
-        let fs = include_bytes!("shaders/shader.frag.spv");
         let fs_module =
-            device.create_shader_module(&wgpu::read_spirv(std::io::Cursor::new(&fs[..])).unwrap());
+            device.create_shader_module(wgpu::include_spirv!("shaders/shader.frag.spv"));
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            bindings: &[],
             label: None,
+            entries: &[],
         });
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &bind_group_layout,
-            bindings: &[],
             label: None,
+            layout: &bind_group_layout,
+            entries: &[],
         });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: None,
             bind_group_layouts: &[&bind_group_layout],
+            push_constant_ranges: &[],
         });
 
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            layout: &pipeline_layout,
+            label: None,
+            layout: Some(&pipeline_layout),
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &vs_module,
                 entry_point: "main",
@@ -60,10 +61,8 @@ impl Chroma {
             }),
             rasterization_state: Some(wgpu::RasterizationStateDescriptor {
                 front_face: wgpu::FrontFace::Ccw,
-                cull_mode: wgpu::CullMode::None,
-                depth_bias: 0,
-                depth_bias_slope_scale: 0.0,
-                depth_bias_clamp: 0.0,
+                cull_mode: wgpu::CullMode::Back,
+                ..Default::default()
             }),
             primitive_topology: wgpu::PrimitiveTopology::TriangleStrip,
             color_states: &[wgpu::ColorStateDescriptor {
@@ -88,6 +87,7 @@ impl Chroma {
 
         let buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
+            mapped_at_creation: false,
             size: settings.max_particles * 2 * 4,
             usage: wgpu::BufferUsage::VERTEX | wgpu::BufferUsage::MAP_WRITE,
         });
@@ -136,14 +136,13 @@ impl Renderer for Chroma {
 
     async fn render(&self, device: &wgpu::Device, dest: &wgpu::TextureView) -> wgpu::CommandBuffer {
         if !self.particles.is_empty() {
-            let buffer_future = self
-                .buffer
-                .map_write(0, self.particles.len() as u64 * 2 * 4);
+            let buffer_slice = self.buffer.slice(..);
+            let buffer_future = buffer_slice.map_async(wgpu::MapMode::Write);
 
             device.poll(wgpu::Maintain::Wait);
 
-            if let Ok(mut buffer_map) = buffer_future.await {
-                let buf = buffer_map.as_slice();
+            if let Ok(()) = buffer_future.await {
+                let mut buf = buffer_slice.get_mapped_range_mut();
 
                 for (i, particle) in self.particles.iter().enumerate() {
                     for (j, b) in particle.pos.x().to_ne_bytes().iter().enumerate() {
@@ -154,6 +153,9 @@ impl Renderer for Chroma {
                         buf[8 * i + 4 + j] = *b;
                     }
                 }
+
+                drop(buf);
+                self.buffer.unmap();
             }
         }
 
@@ -165,20 +167,16 @@ impl Renderer for Chroma {
                 color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                     attachment: dest,
                     resolve_target: None,
-                    load_op: wgpu::LoadOp::Clear,
-                    store_op: wgpu::StoreOp::Store,
-                    clear_color: wgpu::Color::BLACK,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: true,
+                    },
                 }],
                 depth_stencil_attachment: None,
             });
             rpass.set_pipeline(&self.render_pipeline);
             rpass.set_bind_group(0, &self.bind_group, &[]);
-            rpass.set_vertex_buffer(
-                0,
-                &self.buffer,
-                0,
-                self.particles.len() as u64 * 2 * 4, // 4 == sizeof f32
-            );
+            rpass.set_vertex_buffer(0, self.buffer.slice(..self.particles.len() as u64 * 2 * 4));
             rpass.draw(0..4, 0..self.particles.len() as u32);
         }
 
