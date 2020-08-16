@@ -33,11 +33,15 @@ fn run(event_loop: EventLoop<()>, window: Window) {
 
     let mut renderer = Chroma::new(
         &device,
+        size.width,
+        size.height,
         ChromaSettings {
-            max_particles: 128,
-            frequencies: 32,
-            emit_interval: Duration::from_millis(10),
-            gravity: glam::Vec2::new(0.0, -9.81),
+            gravity: (0.0, -1.0).into(),
+            max_particles: 2048,
+            particles_per_second: 200,
+            angular_spread: 1.0,
+            velocity_spread: 0.1,
+            size_range: 1.0..3.0,
         },
     );
 
@@ -54,17 +58,26 @@ fn run(event_loop: EventLoop<()>, window: Window) {
     let mut last_update_inst = Instant::now();
 
     event_loop.run(move |event, _, control_flow| {
-        *control_flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(10));
+        *control_flow = ControlFlow::Poll;
 
         match event {
             Event::MainEventsCleared => {
                 if last_update_inst.elapsed() >= Duration::from_millis(16) {
-                    window.request_redraw();
                     renderer.update(last_update_inst.elapsed(), &[0.5; 32]);
-                    last_update_inst = Instant::now();
 
-                    *control_flow =
-                        ControlFlow::WaitUntil(last_update_inst + Duration::from_millis(16));
+                    let frame = match swap_chain.get_current_frame() {
+                        Ok(frame) => frame,
+                        Err(_) => {
+                            swap_chain = device.create_swap_chain(&surface, &sc_desc);
+                            swap_chain
+                                .get_current_frame()
+                                .expect("Failed to get next swapchain texture!")
+                        }
+                    };
+
+                    renderer.render(&device, &queue, &frame.output.view);
+
+                    last_update_inst = Instant::now();
                 }
             }
             Event::WindowEvent {
@@ -74,26 +87,12 @@ fn run(event_loop: EventLoop<()>, window: Window) {
                 sc_desc.width = size.width;
                 sc_desc.height = size.height;
                 swap_chain = device.create_swap_chain(&surface, &sc_desc);
+                renderer.resize(&device, size.width, size.height);
             }
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
                 ..
             } => *control_flow = ControlFlow::Exit,
-            Event::RedrawRequested(..) => {
-                let frame = match swap_chain.get_current_frame() {
-                    Ok(frame) => frame,
-                    Err(_) => {
-                        swap_chain = device.create_swap_chain(&surface, &sc_desc);
-                        swap_chain
-                            .get_current_frame()
-                            .expect("Failed to get next swapchain texture!")
-                    }
-                };
-
-                let commands = block_on(renderer.render(&device, &frame.output.view));
-
-                queue.submit(Some(commands));
-            }
             _ => {}
         }
     });
@@ -103,7 +102,7 @@ fn main() {
     let event_loop = EventLoop::new();
     let window = winit::window::WindowBuilder::new()
         .with_title("ChromaViz")
-        .with_inner_size(winit::dpi::PhysicalSize::new(512, 512))
+        .with_inner_size(winit::dpi::PhysicalSize::new(640, 480))
         .build(&event_loop)
         .unwrap();
 

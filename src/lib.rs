@@ -1,10 +1,11 @@
+pub mod chroma;
 pub mod renderer;
 
-pub use renderer::Renderer;
-
 pub mod prelude {
-    pub use crate::renderer::{
+    pub use crate::{
         chroma::{Chroma, ChromaSettings},
-        Renderer,
+        renderer::Renderer,
     };
 }
+
+pub use crate::prelude::*;
