@@ -37,11 +37,11 @@ fn run(event_loop: EventLoop<()>, window: Window) {
         size.height,
         ChromaSettings {
             gravity: (0.0, -1.0).into(),
-            max_particles: 2048,
-            particles_per_second: 200,
+            max_particles: 4096,
+            particles_per_second: 1000,
             angular_spread: 1.0,
             velocity_spread: 0.1,
-            size_range: 1.0..3.0,
+            size_range: 4.0..6.0,
         },
     );
 

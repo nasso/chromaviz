@@ -1,6 +1,9 @@
 use crate::Renderer;
 use glam::Vec2;
-use rand::distributions::{Distribution, Uniform as UniformDistribution};
+use rand::{
+    distributions::{Distribution, Uniform as UniformDistribution},
+    Rng,
+};
 use std::time::Duration;
 use wgpu::util::DeviceExt;
 
@@ -11,7 +14,7 @@ struct Uniforms {
 
 impl Uniforms {
     fn raw(&self) -> [u8; std::mem::size_of::<Self>()] {
-        bytemuck::cast([self.frame_size.0, self.frame_size.0])
+        bytemuck::cast([self.frame_size.0, self.frame_size.1])
     }
 }
 
@@ -20,6 +23,7 @@ struct Particle {
     init_pos: Vec2,
     init_vel: Vec2,
     age: Duration,
+    lifetime: Duration,
     pub size: f32,
 }
 
@@ -27,13 +31,7 @@ impl Particle {
     pub fn pos(&self, g: Vec2) -> Vec2 {
         let t = self.age.as_secs_f32();
 
-        g * t * t + self.init_vel * t + self.init_pos
-    }
-
-    pub fn vel(&self, g: Vec2) -> Vec2 {
-        let t = self.age.as_secs_f32();
-
-        g * t + self.init_vel
+        0.5 * g * t * t + self.init_vel * t + self.init_pos
     }
 }
 
@@ -68,9 +66,9 @@ impl ParticleSystem {
         }
     }
 
-    fn update(&mut self, delta: Duration, g: Vec2) {
+    fn update(&mut self, delta: Duration) {
         self.particles
-            .retain(|particle| particle.vel(g).y().abs() > 0.5);
+            .retain(|particle| particle.age < particle.lifetime);
 
         for particle in self.particles.iter_mut() {
             particle.age += delta;
@@ -159,8 +157,16 @@ impl Chroma {
             primitive_topology: wgpu::PrimitiveTopology::TriangleStrip,
             color_states: &[wgpu::ColorStateDescriptor {
                 format: wgpu::TextureFormat::Bgra8UnormSrgb,
-                color_blend: wgpu::BlendDescriptor::REPLACE,
-                alpha_blend: wgpu::BlendDescriptor::REPLACE,
+                color_blend: wgpu::BlendDescriptor {
+                    src_factor: wgpu::BlendFactor::SrcAlpha,
+                    dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                    operation: wgpu::BlendOperation::Add,
+                },
+                alpha_blend: wgpu::BlendDescriptor {
+                    src_factor: wgpu::BlendFactor::One,
+                    dst_factor: wgpu::BlendFactor::One,
+                    operation: wgpu::BlendOperation::Add,
+                },
                 write_mask: wgpu::ColorWrite::ALL,
             }],
             depth_stencil_state: None,
@@ -211,25 +217,52 @@ impl Chroma {
 
         // spawn new ones
         for i in 0..new_count {
-            let freq = rand::random();
+            let freq = rng.gen();
             let newborn_age = delta - period.mul_f64(i as f64);
 
             let angle =
                 (90.0 + spread_dist.sample(&mut rng) * self.settings.angular_spread).to_radians();
-            let velocity = self.velocity_for(freq)
+            let velocity = self.velocity_for(freq, self.settings.gravity)
                 + spread_dist.sample(&mut rng) * self.settings.velocity_spread;
+
+            let init_vel = (angle.cos() * velocity, angle.sin() * velocity).into();
 
             self.particle_system.emit_particle(Particle {
                 init_pos: (freq, 0.0).into(),
-                init_vel: (angle.cos() * velocity, angle.sin() * velocity).into(),
                 age: newborn_age,
+                init_vel,
+                lifetime: Duration::from_secs_f32(
+                    (-init_vel.y() / self.settings.gravity.y()).max(0.0),
+                ),
                 size: size_dist.sample(&mut rng),
             });
         }
     }
 
-    fn velocity_for(&self, freq: f32) -> f32 {
-        1.0
+    fn velocity_for(&self, freq: f32, g: Vec2) -> f32 {
+        let target = (freq * 20.0).sin() * 0.1 + 0.5;
+
+        // U = m * g * y
+        // K = mv² / 2
+        //
+        // Problem: what should be the initial velocity to reach height H?
+        //
+        // at y = H:
+        //   > U_top = m * g * H
+        //   > K_top = 0
+        //
+        // at y = 0:
+        //   > U_bot = 0
+        //   > K_bot = U_top = m * g * H     # energy conservation!
+        //
+        // K_bot = mv² / 2
+        // U_top = mgH
+        //
+        // mv² / 2 = mgH
+        // v² / 2 = gH
+        // v² = 2gH
+        // v = sqrt(2gH)
+        (2.0 * g.y().abs() * target).sqrt()
     }
 }
 
@@ -239,7 +272,7 @@ impl Renderer for Chroma {
         self.gen_particles(delta);
 
         // update the particle system
-        self.particle_system.update(delta, self.settings.gravity);
+        self.particle_system.update(delta);
     }
 
     fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {
@@ -276,7 +309,14 @@ impl Renderer for Chroma {
 
                 buf[addr + 0..addr + 4].copy_from_slice(&pos.x().to_ne_bytes());
                 buf[addr + 4..addr + 8].copy_from_slice(&pos.y().to_ne_bytes());
-                buf[addr + 8..addr + 12].copy_from_slice(&particle.size.to_ne_bytes());
+                buf[addr + 8..addr + 12].copy_from_slice(
+                    &(particle.size
+                        * (1.0
+                            - (particle.age.as_secs_f32() / particle.lifetime.as_secs_f32())
+                                .powi(2))
+                        .max(0.0))
+                    .to_ne_bytes(),
+                );
             }
         }
 
