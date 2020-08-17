@@ -21,6 +21,7 @@ struct Particle {
     init_vel: Vec2,
     age: Duration,
     lifetime: Duration,
+    hue: f32,
     pub size: f32,
 }
 
@@ -172,9 +173,9 @@ impl Chroma {
             vertex_state: wgpu::VertexStateDescriptor {
                 index_format: wgpu::IndexFormat::Uint16,
                 vertex_buffers: &[wgpu::VertexBufferDescriptor {
-                    stride: std::mem::size_of::<f32>() as u64 * 3,
+                    stride: std::mem::size_of::<f32>() as u64 * 4,
                     step_mode: wgpu::InputStepMode::Instance,
-                    attributes: &wgpu::vertex_attr_array![0 => Float3],
+                    attributes: &wgpu::vertex_attr_array![0 => Float4],
                 }],
             },
             sample_count: 1,
@@ -185,7 +186,7 @@ impl Chroma {
         let particle_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
             mapped_at_creation: false,
-            size: settings.max_particles * std::mem::size_of::<f32>() as u64 * 3,
+            size: settings.max_particles * std::mem::size_of::<f32>() as u64 * 4,
             usage: wgpu::BufferUsage::VERTEX | wgpu::BufferUsage::COPY_DST,
         });
 
@@ -235,6 +236,7 @@ impl Chroma {
 
             self.particle_system.emit_particle(Particle {
                 init_pos: (freq, 0.0).into(),
+                hue: freq,
                 age: newborn_age,
                 init_vel,
                 lifetime: Duration::from_secs_f32(
@@ -303,7 +305,8 @@ impl Renderer for Chroma {
                 &self.particle_buffer,
                 0,
                 wgpu::BufferSize::new(
-                    (self.particle_system.count() * 3 * 4) as wgpu::BufferAddress,
+                    (self.particle_system.count() * 4 * std::mem::size_of::<f32>())
+                        as wgpu::BufferAddress,
                 )
                 .unwrap(),
                 device,
@@ -311,18 +314,17 @@ impl Renderer for Chroma {
 
             for (i, particle) in self.particle_system.particles().enumerate() {
                 let pos = particle.pos(self.settings.gravity);
-                let addr = 12 * i;
+                let size = {
+                    let life_progress =
+                        particle.age.as_secs_f32() / particle.lifetime.as_secs_f32();
+                    particle.size * (1.0 - life_progress.powi(2)).max(0.0)
+                };
+                let addr = std::mem::size_of::<f32>() * 4 * i;
 
                 buf[addr + 0..addr + 4].copy_from_slice(&pos.x().to_ne_bytes());
                 buf[addr + 4..addr + 8].copy_from_slice(&pos.y().to_ne_bytes());
-                buf[addr + 8..addr + 12].copy_from_slice(
-                    &(particle.size
-                        * (1.0
-                            - (particle.age.as_secs_f32() / particle.lifetime.as_secs_f32())
-                                .powi(2))
-                        .max(0.0))
-                    .to_ne_bytes(),
-                );
+                buf[addr + 8..addr + 12].copy_from_slice(&size.to_ne_bytes());
+                buf[addr + 12..addr + 16].copy_from_slice(&particle.hue.to_ne_bytes());
             }
         }
 
@@ -347,7 +349,8 @@ impl Renderer for Chroma {
             rpass.set_bind_group(0, &self.bind_group, &[]);
             rpass.set_vertex_buffer(
                 0,
-                self.particle_buffer.slice(..particle_count as u64 * 3 * 4),
+                self.particle_buffer
+                    .slice(..particle_count as u64 * 4 * std::mem::size_of::<f32>() as u64),
             );
             rpass.draw(0..4, 0..particle_count as u32);
         }

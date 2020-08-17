@@ -36,12 +36,12 @@ fn run(event_loop: EventLoop<()>, window: Window) {
         size.width,
         size.height,
         ChromaSettings {
-            gravity: (0.0, -1.0).into(),
+            gravity: (0.0, -3.0).into(),
             frequencies: 32,
-            frequencies_spread: 0.0,
+            frequencies_spread: 1.0,
             max_particles: 4096,
             particles_per_second: 1000,
-            angular_spread: 1.0,
+            angular_spread: 2.0,
             velocity_spread: 0.1,
             size_range: 4.0..6.0,
         },
@@ -52,7 +52,7 @@ fn run(event_loop: EventLoop<()>, window: Window) {
         format: wgpu::TextureFormat::Bgra8UnormSrgb,
         width: size.width,
         height: size.height,
-        present_mode: wgpu::PresentMode::Mailbox,
+        present_mode: wgpu::PresentMode::Immediate,
     };
 
     let mut swap_chain = device.create_swap_chain(&surface, &sc_desc);

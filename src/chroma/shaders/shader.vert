@@ -1,8 +1,9 @@
 #version 450
 
-layout(location = 0) in vec3 a_Pos_Size;
+layout(location = 0) in vec4 a_Pos_Size_Hue;
 layout(location = 0) out vec2 v_TexCoord;
 layout(location = 1) out float v_Size;
+layout(location = 2) out float v_Hue;
 
 layout(set = 0, binding = 0) uniform Globals {
     vec2 u_FrameSize;
@@ -21,9 +22,10 @@ const vec2 QUAD_VERTICES[4] = {
 
 void main() {
     v_TexCoord = QUAD_VERTICES[gl_VertexIndex % 4] + 0.5;
-    v_Size = a_Pos_Size.z;
+    v_Size = a_Pos_Size_Hue.z;
+    v_Hue = a_Pos_Size_Hue.w;
 
-    vec2 position = a_Pos_Size.xy + QUAD_VERTICES[gl_VertexIndex % 4] * a_Pos_Size.z / u_FrameSize;
+    vec2 position = a_Pos_Size_Hue.xy + QUAD_VERTICES[gl_VertexIndex % 4] * a_Pos_Size_Hue.z / u_FrameSize;
 
     // go from (0..1) to (-1..1) coordinates
     position = position * 2 - 1;
