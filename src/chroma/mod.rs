@@ -1,9 +1,6 @@
 use crate::Renderer;
 use glam::Vec2;
-use rand::{
-    distributions::{Distribution, Uniform as UniformDistribution},
-    Rng,
-};
+use rand::distributions::{Distribution, Uniform as UniformDistribution};
 use std::time::Duration;
 use wgpu::util::DeviceExt;
 
@@ -79,6 +76,8 @@ impl ParticleSystem {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChromaSettings {
     pub gravity: Vec2,
+    pub frequencies: u64,
+    pub frequencies_spread: f32,
     pub max_particles: u64,
     pub particles_per_second: u64,
     pub angular_spread: f32,
@@ -206,6 +205,7 @@ impl Chroma {
 
     fn gen_particles(&mut self, delta: Duration) {
         let mut rng = rand::thread_rng();
+        let freq_dist: UniformDistribution<u64> = (0..self.settings.frequencies).into();
         let spread_dist: UniformDistribution<f32> = (-0.5..0.5).into();
         let size_dist: UniformDistribution<f32> = self.settings.size_range.clone().into();
         let period = Duration::from_secs_f64(1.0 / self.settings.particles_per_second as f64);
@@ -217,7 +217,13 @@ impl Chroma {
 
         // spawn new ones
         for i in 0..new_count {
-            let freq = rng.gen();
+            let freq = {
+                let freq =
+                    freq_dist.sample(&mut rng) as f32 / (self.settings.frequencies - 1) as f32;
+                let spread = spread_dist.sample(&mut rng) * self.settings.frequencies_spread;
+
+                freq + spread / (self.settings.frequencies - 1) as f32
+            };
             let newborn_age = delta - period.mul_f64(i as f64);
 
             let angle =
