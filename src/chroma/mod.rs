@@ -15,9 +15,9 @@ pub struct Chroma {
 }
 
 impl Chroma {
-    pub fn new(device: &wgpu::Device, width: u32, height: u32, settings: ChromaSettings) -> Self {
+    pub fn new(device: &wgpu::Device, settings: ChromaSettings) -> Self {
         Self {
-            particle_renderer: ParticleRenderer::new(device, width, height, settings.particles),
+            particle_renderer: ParticleRenderer::new(device, settings.particles),
         }
     }
 }
@@ -27,15 +27,13 @@ impl Renderer for Chroma {
         self.particle_renderer.update(delta, freq_data);
     }
 
-    fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {
-        self.particle_renderer.resize(device, width, height);
-    }
-
     fn render(
         &mut self,
         device: &wgpu::Device,
         dest: &wgpu::TextureView,
+        width: u32,
+        height: u32,
     ) -> Vec<wgpu::CommandBuffer> {
-        self.particle_renderer.render(device, dest)
+        self.particle_renderer.render(device, dest, width, height)
     }
 }

@@ -2,7 +2,6 @@ use crate::Renderer;
 use glam::Vec2;
 use rand::distributions::{Distribution, Uniform as UniformDistribution};
 use std::time::Duration;
-use wgpu::util::DeviceExt;
 
 #[derive(Debug, Clone)]
 struct Particle {
@@ -95,10 +94,11 @@ pub struct ParticleRenderer {
     uniform_buf: wgpu::Buffer,
     particle_system: ParticleSystem,
     time_since_last_emit: Duration,
+    last_frame_size: Option<(u32, u32)>,
 }
 
 impl ParticleRenderer {
-    pub fn new(device: &wgpu::Device, width: u32, height: u32, settings: ParticleSettings) -> Self {
+    pub fn new(device: &wgpu::Device, settings: ParticleSettings) -> Self {
         let vs_module =
             device.create_shader_module(wgpu::include_spirv!("shaders/particle.vert.spv"));
 
@@ -123,10 +123,11 @@ impl ParticleRenderer {
             push_constant_ranges: &[],
         });
 
-        let uniform_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let uniform_buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("uniform buffer"),
-            contents: bytemuck::cast_slice(&[width as f32, height as f32]),
             usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+            size: std::mem::size_of::<Uniforms>() as u64,
+            mapped_at_creation: false,
         });
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -190,11 +191,12 @@ impl ParticleRenderer {
             usage: wgpu::BufferUsage::VERTEX | wgpu::BufferUsage::COPY_DST,
         });
 
-        let staging_belt = wgpu::util::StagingBelt::new(0x100, device);
+        let staging_belt = wgpu::util::StagingBelt::new(0x100);
 
         Self {
             particle_system: ParticleSystem::new(settings.max_particles as usize),
             time_since_last_emit: Duration::from_secs(0),
+            last_frame_size: None,
             staging_belt,
             particle_buffer,
             uniform_buf,
@@ -283,29 +285,41 @@ impl Renderer for ParticleRenderer {
         self.particle_system.update(delta);
     }
 
-    fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {
-        self.staging_belt
-            .write_buffer(
-                &self.uniform_buf,
-                0,
-                wgpu::BufferSize::new(std::mem::size_of::<Uniforms>() as u64).unwrap(),
-                device,
-            )
-            .copy_from_slice(
-                &Uniforms {
-                    frame_size: (width as f32, height as f32),
-                }
-                .raw(),
-            );
-    }
-
     fn render(
         &mut self,
         device: &wgpu::Device,
         dest: &wgpu::TextureView,
+        width: u32,
+        height: u32,
     ) -> Vec<wgpu::CommandBuffer> {
+        let mut encoder =
+            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+
+        match self.last_frame_size {
+            Some(size) if size == (width, height) => {}
+            _ => {
+                self.staging_belt
+                    .write_buffer(
+                        &mut encoder,
+                        &self.uniform_buf,
+                        0,
+                        wgpu::BufferSize::new(std::mem::size_of::<Uniforms>() as u64).unwrap(),
+                        device,
+                    )
+                    .copy_from_slice(
+                        &Uniforms {
+                            frame_size: (width as f32, height as f32),
+                        }
+                        .raw(),
+                    );
+
+                self.last_frame_size = Some((width, height));
+            }
+        }
+
         if !self.particle_system.is_empty() {
             let mut buf = self.staging_belt.write_buffer(
+                &mut encoder,
                 &self.particle_buffer,
                 0,
                 wgpu::BufferSize::new(
@@ -332,8 +346,7 @@ impl Renderer for ParticleRenderer {
             }
         }
 
-        let mut encoder =
-            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        self.staging_belt.finish();
 
         {
             let particle_count = self.particle_system.count();
@@ -359,6 +372,6 @@ impl Renderer for ParticleRenderer {
             rpass.draw(0..4, 0..particle_count as u32);
         }
 
-        vec![self.staging_belt.flush(device), encoder.finish()]
+        vec![encoder.finish()]
     }
 }

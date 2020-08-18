@@ -33,8 +33,6 @@ fn run(event_loop: EventLoop<()>, window: Window) {
 
     let mut renderer = Chroma::new(
         &device,
-        size.width,
-        size.height,
         ChromaSettings {
             particles: ParticleSettings {
                 gravity: (0.0, -2.0).into(),
@@ -85,7 +83,12 @@ fn run(event_loop: EventLoop<()>, window: Window) {
                         }
                     };
 
-                    queue.submit(renderer.render(&device, &frame.output.view));
+                    queue.submit(renderer.render(
+                        &device,
+                        &frame.output.view,
+                        sc_desc.width,
+                        sc_desc.height,
+                    ));
 
                     last_update_inst = Instant::now();
                 }
@@ -97,7 +100,6 @@ fn run(event_loop: EventLoop<()>, window: Window) {
                 sc_desc.width = size.width;
                 sc_desc.height = size.height;
                 swap_chain = device.create_swap_chain(&surface, &sc_desc);
-                renderer.resize(&device, size.width, size.height);
             }
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
