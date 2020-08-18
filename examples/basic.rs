@@ -85,7 +85,7 @@ fn run(event_loop: EventLoop<()>, window: Window) {
                         }
                     };
 
-                    renderer.render(&device, &queue, &frame.output.view);
+                    queue.submit(renderer.render(&device, &frame.output.view));
 
                     last_update_inst = Instant::now();
                 }

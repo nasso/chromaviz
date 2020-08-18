@@ -31,7 +31,11 @@ impl Renderer for Chroma {
         self.particle_renderer.resize(device, width, height);
     }
 
-    fn render(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, dest: &wgpu::TextureView) {
-        self.particle_renderer.render(device, queue, dest);
+    fn render(
+        &mut self,
+        device: &wgpu::Device,
+        dest: &wgpu::TextureView,
+    ) -> Vec<wgpu::CommandBuffer> {
+        self.particle_renderer.render(device, dest)
     }
 }

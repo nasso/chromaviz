@@ -299,7 +299,11 @@ impl Renderer for ParticleRenderer {
             );
     }
 
-    fn render(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, dest: &wgpu::TextureView) {
+    fn render(
+        &mut self,
+        device: &wgpu::Device,
+        dest: &wgpu::TextureView,
+    ) -> Vec<wgpu::CommandBuffer> {
         if !self.particle_system.is_empty() {
             let mut buf = self.staging_belt.write_buffer(
                 &self.particle_buffer,
@@ -355,6 +359,6 @@ impl Renderer for ParticleRenderer {
             rpass.draw(0..4, 0..particle_count as u32);
         }
 
-        queue.submit(vec![self.staging_belt.flush(device), encoder.finish()]);
+        vec![self.staging_belt.flush(device), encoder.finish()]
     }
 }
