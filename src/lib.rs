@@ -3,7 +3,7 @@ pub mod renderer;
 
 pub mod prelude {
     pub use crate::{
-        chroma::{Chroma, ChromaSettings},
+        chroma::{Chroma, ChromaSettings, ParticleSettings},
         renderer::Renderer,
     };
 }

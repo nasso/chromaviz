@@ -36,14 +36,16 @@ fn run(event_loop: EventLoop<()>, window: Window) {
         size.width,
         size.height,
         ChromaSettings {
-            gravity: (0.0, -2.0).into(),
-            frequencies: 32,
-            frequencies_spread: 1.0,
-            max_particles: 10000,
-            particles_per_second: 2000,
-            angular_spread: 5.0,
-            velocity_spread: 0.1,
-            size_range: 4.0..6.0,
+            particles: ParticleSettings {
+                gravity: (0.0, -2.0).into(),
+                frequencies: 32,
+                frequencies_spread: 1.0,
+                max_particles: 10000,
+                particles_per_second: 2000,
+                angular_spread: 5.0,
+                velocity_spread: 0.1,
+                size_range: 4.0..6.0,
+            },
         },
     );
 
@@ -58,6 +60,7 @@ fn run(event_loop: EventLoop<()>, window: Window) {
     let mut swap_chain = device.create_swap_chain(&surface, &sc_desc);
 
     let mut last_update_inst = Instant::now();
+    let start_inst = Instant::now();
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -65,7 +68,12 @@ fn run(event_loop: EventLoop<()>, window: Window) {
         match event {
             Event::MainEventsCleared => {
                 if last_update_inst.elapsed() >= Duration::from_millis(16) {
-                    renderer.update(last_update_inst.elapsed(), &[0.5; 32]);
+                    let t = start_inst.elapsed().as_secs_f32();
+                    let phase = t * 4.0;
+                    let freq_data: Vec<f32> = (0..32)
+                        .map(|f| (f as f32 + phase).sin() * 0.1 + 0.5)
+                        .collect();
+                    renderer.update(last_update_inst.elapsed(), &freq_data);
 
                     let frame = match swap_chain.get_current_frame() {
                         Ok(frame) => frame,
