@@ -33,9 +33,12 @@ fn run(event_loop: EventLoop<()>, window: Window) {
 
     let mut renderer = Chroma::new(
         &device,
+        size.width,
+        size.height,
+        wgpu::TextureFormat::Bgra8UnormSrgb,
         ChromaSettings {
             particles: ParticleSettings {
-                gravity: (0.0, -2.0).into(),
+                gravity: (0.0, -3.0).into(),
                 frequencies: 32,
                 frequencies_spread: 1.0,
                 max_particles: 10000,
@@ -67,9 +70,11 @@ fn run(event_loop: EventLoop<()>, window: Window) {
             Event::MainEventsCleared => {
                 if last_update_inst.elapsed() >= Duration::from_millis(16) {
                     let t = start_inst.elapsed().as_secs_f32();
-                    let phase = t * 4.0;
+                    let phase = t;
+                    let global_height = (t * 4.0).sin() * 0.2 + 0.4;
                     let freq_data: Vec<f32> = (0..32)
-                        .map(|f| (f as f32 + phase).sin() * 0.1 + 0.5)
+                        .map(|f| (0.5 * f as f32 + phase).sin() * 0.2 + global_height)
+                        .map(|f| f.max(0.0).min(1.0))
                         .collect();
                     renderer.update(last_update_inst.elapsed(), &freq_data);
 
@@ -83,12 +88,11 @@ fn run(event_loop: EventLoop<()>, window: Window) {
                         }
                     };
 
-                    queue.submit(renderer.render(
-                        &device,
-                        &frame.output.view,
-                        sc_desc.width,
-                        sc_desc.height,
-                    ));
+                    let commands = renderer.render(&device, &frame.output.view);
+
+                    if !commands.is_empty() {
+                        queue.submit(commands);
+                    }
 
                     last_update_inst = Instant::now();
                 }
@@ -100,6 +104,12 @@ fn run(event_loop: EventLoop<()>, window: Window) {
                 sc_desc.width = size.width;
                 sc_desc.height = size.height;
                 swap_chain = device.create_swap_chain(&surface, &sc_desc);
+
+                let commands = renderer.resize(&device, size.width, size.height);
+
+                if !commands.is_empty() {
+                    queue.submit(commands);
+                }
             }
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,

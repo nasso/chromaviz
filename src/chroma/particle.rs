@@ -94,11 +94,14 @@ pub struct ParticleRenderer {
     uniform_buf: wgpu::Buffer,
     particle_system: ParticleSystem,
     time_since_last_emit: Duration,
-    last_frame_size: Option<(u32, u32)>,
 }
 
 impl ParticleRenderer {
-    pub fn new(device: &wgpu::Device, settings: ParticleSettings) -> Self {
+    pub fn new(
+        device: &wgpu::Device,
+        format: wgpu::TextureFormat,
+        settings: ParticleSettings,
+    ) -> Self {
         let vs_module =
             device.create_shader_module(wgpu::include_spirv!("shaders/particle.vert.spv"));
 
@@ -109,7 +112,7 @@ impl ParticleRenderer {
             label: None,
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
-                visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
+                visibility: wgpu::ShaderStage::VERTEX,
                 ty: wgpu::BindingType::UniformBuffer {
                     dynamic: false,
                     min_binding_size: wgpu::BufferSize::new(std::mem::size_of::<Uniforms>() as u64),
@@ -157,7 +160,7 @@ impl ParticleRenderer {
             }),
             primitive_topology: wgpu::PrimitiveTopology::TriangleStrip,
             color_states: &[wgpu::ColorStateDescriptor {
-                format: wgpu::TextureFormat::Bgra8UnormSrgb,
+                format,
                 color_blend: wgpu::BlendDescriptor {
                     src_factor: wgpu::BlendFactor::SrcAlpha,
                     dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
@@ -196,7 +199,6 @@ impl ParticleRenderer {
         Self {
             particle_system: ParticleSystem::new(settings.max_particles as usize),
             time_since_last_emit: Duration::from_secs(0),
-            last_frame_size: None,
             staging_belt,
             particle_buffer,
             uniform_buf,
@@ -274,79 +276,86 @@ impl ParticleRenderer {
         // v = sqrt(2gH)
         (2.0 * g.y().abs() * target).sqrt()
     }
-}
 
-impl Renderer for ParticleRenderer {
-    fn update(&mut self, delta: Duration, freq_data: &[f32]) {
+    pub fn update(&mut self, delta: Duration, freq_data: &[f32]) {
         // update the particle generators
         self.gen_particles(delta, freq_data);
 
         // update the particle system
         self.particle_system.update(delta);
     }
+}
 
-    fn render(
+impl Renderer for ParticleRenderer {
+    fn resize(
         &mut self,
         device: &wgpu::Device,
-        dest: &wgpu::TextureView,
         width: u32,
         height: u32,
     ) -> Vec<wgpu::CommandBuffer> {
         let mut encoder =
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
-        match self.last_frame_size {
-            Some(size) if size == (width, height) => {}
-            _ => {
-                self.staging_belt
-                    .write_buffer(
-                        &mut encoder,
-                        &self.uniform_buf,
-                        0,
-                        wgpu::BufferSize::new(std::mem::size_of::<Uniforms>() as u64).unwrap(),
-                        device,
-                    )
-                    .copy_from_slice(
-                        &Uniforms {
-                            frame_size: (width as f32, height as f32),
-                        }
-                        .raw(),
-                    );
-
-                self.last_frame_size = Some((width, height));
-            }
-        }
-
-        if !self.particle_system.is_empty() {
-            let mut buf = self.staging_belt.write_buffer(
+        self.staging_belt
+            .write_buffer(
                 &mut encoder,
-                &self.particle_buffer,
+                &self.uniform_buf,
                 0,
-                wgpu::BufferSize::new(
-                    (self.particle_system.count() * 4 * std::mem::size_of::<f32>())
-                        as wgpu::BufferAddress,
-                )
-                .unwrap(),
+                wgpu::BufferSize::new(std::mem::size_of::<Uniforms>() as u64).unwrap(),
                 device,
+            )
+            .copy_from_slice(
+                &Uniforms {
+                    frame_size: (width as f32, height as f32),
+                }
+                .raw(),
             );
 
-            for (i, particle) in self.particle_system.particles().enumerate() {
-                let pos = particle.pos(self.settings.gravity);
-                let size = {
-                    let life_progress =
-                        particle.age.as_secs_f32() / particle.lifetime.as_secs_f32();
-                    particle.size * (1.0 - life_progress.powi(2)).max(0.0)
-                };
-                let addr = std::mem::size_of::<f32>() * 4 * i;
-
-                buf[addr + 0..addr + 4].copy_from_slice(&pos.x().to_ne_bytes());
-                buf[addr + 4..addr + 8].copy_from_slice(&pos.y().to_ne_bytes());
-                buf[addr + 8..addr + 12].copy_from_slice(&size.to_ne_bytes());
-                buf[addr + 12..addr + 16].copy_from_slice(&particle.hue.to_ne_bytes());
-            }
-        }
-
         self.staging_belt.finish();
+
+        vec![encoder.finish()]
+    }
+
+    fn render(
+        &mut self,
+        device: &wgpu::Device,
+        dest: &wgpu::TextureView,
+    ) -> Vec<wgpu::CommandBuffer> {
+        let mut encoder =
+            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+
+        if !self.particle_system.is_empty() {
+            {
+                let mut buf = self.staging_belt.write_buffer(
+                    &mut encoder,
+                    &self.particle_buffer,
+                    0,
+                    wgpu::BufferSize::new(
+                        (self.particle_system.count() * 4 * std::mem::size_of::<f32>())
+                            as wgpu::BufferAddress,
+                    )
+                    .unwrap(),
+                    device,
+                );
+
+                for (i, particle) in self.particle_system.particles().enumerate() {
+                    let pos = particle.pos(self.settings.gravity);
+                    let size = {
+                        let life_progress =
+                            particle.age.as_secs_f32() / particle.lifetime.as_secs_f32();
+                        particle.size * (1.0 - life_progress.powi(2)).max(0.0)
+                    };
+                    let addr = std::mem::size_of::<f32>() * 4 * i;
+
+                    buf[addr + 0..addr + 4].copy_from_slice(&pos.x().to_ne_bytes());
+                    buf[addr + 4..addr + 8].copy_from_slice(&pos.y().to_ne_bytes());
+                    buf[addr + 8..addr + 12].copy_from_slice(&size.to_ne_bytes());
+                    buf[addr + 12..addr + 16].copy_from_slice(&particle.hue.to_ne_bytes());
+                }
+            }
+
+            self.staging_belt.finish();
+        }
 
         {
             let particle_count = self.particle_system.count();

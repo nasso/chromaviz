@@ -5,7 +5,7 @@ layout(location = 0) out vec2 v_TexCoord;
 layout(location = 1) out float v_Size;
 layout(location = 2) out float v_Hue;
 
-layout(set = 0, binding = 0) uniform Globals {
+layout(set = 0, binding = 0) uniform Locals {
     vec2 u_FrameSize;
 };
 
