@@ -28,7 +28,7 @@ impl Chroma {
     ) -> Self {
         Self {
             particle_renderer: ParticleRenderer::new(device, format, settings.particles),
-            blur_renderer: BlurRenderer::new(device, width, height, format),
+            blur_renderer: BlurRenderer::new(device, width, height, 0.25, format),
         }
     }
 
@@ -47,7 +47,7 @@ impl Renderer for Chroma {
         let mut commands = Vec::new();
 
         commands.append(&mut self.particle_renderer.resize(device, width, height));
-        commands.append(&mut self.blur_renderer.resize(device, width, height));
+        commands.append(&mut self.blur_renderer.resize(device, width, height, 0.25));
         commands
     }
 
@@ -63,7 +63,7 @@ impl Renderer for Chroma {
                 .particle_renderer
                 .render(device, self.blur_renderer.source()),
         );
-        commands.append(&mut self.blur_renderer.render(device, dest));
+        commands.append(&mut self.blur_renderer.render(device, dest, 2));
         commands
     }
 }

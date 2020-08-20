@@ -24,9 +24,15 @@ impl BlurRenderer {
         device: &wgpu::Device,
         width: u32,
         height: u32,
+        scale: f32,
         format: wgpu::TextureFormat,
     ) -> Self {
-        let swap_buffers = SwapBufferPair::new(device, width, height, format);
+        let swap_buffers = SwapBufferPair::new(
+            device,
+            (width as f32 * scale) as u32,
+            (height as f32 * scale) as u32,
+            format,
+        );
 
         let vs_module = device.create_shader_module(wgpu::include_spirv!("shaders/blur.vert.spv"));
         let fs_module = device.create_shader_module(wgpu::include_spirv!("shaders/blur.frag.spv"));
@@ -119,8 +125,13 @@ impl BlurRenderer {
         device: &wgpu::Device,
         width: u32,
         height: u32,
+        scale: f32,
     ) -> Vec<wgpu::CommandBuffer> {
-        self.swap_buffers.resize(device, width, height);
+        self.swap_buffers.resize(
+            device,
+            (width as f32 * scale) as u32,
+            (height as f32 * scale) as u32,
+        );
 
         Vec::new()
     }
@@ -129,6 +140,7 @@ impl BlurRenderer {
         &mut self,
         device: &wgpu::Device,
         dest: &wgpu::TextureView,
+        passes: u64,
     ) -> Vec<wgpu::CommandBuffer> {
         let mut encoder =
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
@@ -153,44 +165,54 @@ impl BlurRenderer {
 
         self.staging_belt.finish();
 
-        {
-            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                    attachment: &self.swap_buffers.dest.view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: true,
-                    },
-                }],
-                depth_stencil_attachment: None,
-            });
+        for i in 0..passes {
+            {
+                let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
+                        attachment: &self.swap_buffers.dest.view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: true,
+                        },
+                    }],
+                    depth_stencil_attachment: None,
+                });
 
-            rpass.set_pipeline(&self.render_pipeline);
-            rpass.set_bind_group(0, &self.bind_group, &[]);
-            rpass.set_bind_group(1, &self.swap_buffers.source.bind_group, &[]);
-            rpass.draw(0..4, 0..1);
-        }
+                rpass.set_pipeline(&self.render_pipeline);
+                rpass.set_bind_group(0, &self.bind_group, &[]);
+                rpass.set_bind_group(1, &self.swap_buffers.source.bind_group, &[]);
+                rpass.draw(0..4, 0..1);
+            }
 
-        self.swap_buffers.swap();
+            self.swap_buffers.swap();
 
-        {
-            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                    attachment: dest,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: true,
-                    },
-                }],
-                depth_stencil_attachment: None,
-            });
+            {
+                let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
+                        attachment: if i + 1 == passes {
+                            dest
+                        } else {
+                            &self.swap_buffers.dest.view
+                        },
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: true,
+                        },
+                    }],
+                    depth_stencil_attachment: None,
+                });
 
-            rpass.set_pipeline(&self.render_pipeline);
-            rpass.set_bind_group(0, &self.bind_group, &[]);
-            rpass.set_bind_group(1, &self.swap_buffers.source.bind_group, &[]);
-            rpass.draw(0..4, 1..2);
+                rpass.set_pipeline(&self.render_pipeline);
+                rpass.set_bind_group(0, &self.bind_group, &[]);
+                rpass.set_bind_group(1, &self.swap_buffers.source.bind_group, &[]);
+                rpass.draw(0..4, 1..2);
+            }
+
+            if i + 1 < passes {
+                self.swap_buffers.swap();
+            }
         }
 
         vec![encoder.finish()]
