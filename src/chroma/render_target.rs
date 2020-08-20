@@ -56,21 +56,14 @@ impl RenderTarget {
     }
 }
 
-pub struct SwapBufferPair {
-    pub source: RenderTarget,
-    pub dest: RenderTarget,
+pub struct RenderTargetFamily {
     pub bind_group_layout: wgpu::BindGroupLayout,
     pub sampler: wgpu::Sampler,
     pub format: wgpu::TextureFormat,
 }
 
-impl SwapBufferPair {
-    pub fn new(
-        device: &wgpu::Device,
-        width: u32,
-        height: u32,
-        format: wgpu::TextureFormat,
-    ) -> Self {
+impl RenderTargetFamily {
+    pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: None,
             entries: &[
@@ -104,35 +97,20 @@ impl SwapBufferPair {
         });
 
         Self {
-            source: RenderTarget::new(device, &bind_group_layout, &sampler, width, height, format),
-            dest: RenderTarget::new(device, &bind_group_layout, &sampler, width, height, format),
             bind_group_layout,
             sampler,
             format,
         }
     }
 
-    pub fn swap(&mut self) {
-        std::mem::swap(&mut self.source, &mut self.dest);
-    }
-
-    pub fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {
-        self.source = RenderTarget::new(
+    pub fn create_target(&self, device: &wgpu::Device, width: u32, height: u32) -> RenderTarget {
+        RenderTarget::new(
             device,
             &self.bind_group_layout,
             &self.sampler,
             width,
             height,
             self.format,
-        );
-
-        self.dest = RenderTarget::new(
-            device,
-            &self.bind_group_layout,
-            &self.sampler,
-            width,
-            height,
-            self.format,
-        );
+        )
     }
 }

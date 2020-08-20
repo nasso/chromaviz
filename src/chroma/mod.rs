@@ -1,11 +1,14 @@
 mod blur;
+mod compositor;
 mod particle;
 mod render_target;
 
 use crate::Renderer;
-use blur::BlurRenderer;
+use blur::{BlurDirection, BlurRenderer};
+use compositor::Compositor;
 use particle::ParticleRenderer;
 pub use particle::ParticleSettings;
+use render_target::{RenderTarget, RenderTargetFamily};
 use std::time::Duration;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -14,8 +17,13 @@ pub struct ChromaSettings {
 }
 
 pub struct Chroma {
+    render_target_family: RenderTargetFamily,
     particle_renderer: ParticleRenderer,
     blur_renderer: BlurRenderer,
+    compositor: Compositor,
+    low_res_targets: (RenderTarget, RenderTarget),
+    particles_target: RenderTarget,
+    accumulator: RenderTarget,
 }
 
 impl Chroma {
@@ -26,9 +34,23 @@ impl Chroma {
         format: wgpu::TextureFormat,
         settings: ChromaSettings,
     ) -> Self {
+        let render_target_family = RenderTargetFamily::new(device, format);
+        let particle_renderer =
+            ParticleRenderer::new(device, &render_target_family, settings.particles);
+        let blur_renderer = BlurRenderer::new(device, &render_target_family);
+        let compositor = Compositor::new(device, &render_target_family);
+
         Self {
-            particle_renderer: ParticleRenderer::new(device, format, settings.particles),
-            blur_renderer: BlurRenderer::new(device, width, height, 0.5, format),
+            low_res_targets: (
+                render_target_family.create_target(device, width / 2, height / 2),
+                render_target_family.create_target(device, width / 2, height / 2),
+            ),
+            particles_target: render_target_family.create_target(device, width, height),
+            accumulator: render_target_family.create_target(device, width, height),
+            render_target_family,
+            particle_renderer,
+            blur_renderer,
+            compositor,
         }
     }
 
@@ -49,7 +71,21 @@ impl Renderer for Chroma {
 
         self.particle_renderer
             .resize(device, &mut encoder, width, height);
-        self.blur_renderer.resize(device, width, height, 0.5);
+        self.blur_renderer
+            .resize(device, &mut encoder, width / 2, height / 2);
+
+        self.low_res_targets = (
+            self.render_target_family
+                .create_target(device, width / 2, height / 2),
+            self.render_target_family
+                .create_target(device, width / 2, height / 2),
+        );
+        self.particles_target = self
+            .render_target_family
+            .create_target(device, width, height);
+        self.accumulator = self
+            .render_target_family
+            .create_target(device, width, height);
 
         vec![encoder.finish()]
     }
@@ -62,9 +98,40 @@ impl Renderer for Chroma {
         let mut encoder =
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
+        self.blur_renderer.render(
+            device,
+            &mut encoder,
+            &self.accumulator,
+            &self.low_res_targets.0.view,
+            BlurDirection::Horizontal,
+        );
+        self.blur_renderer.render(
+            device,
+            &mut encoder,
+            &self.low_res_targets.0,
+            &self.low_res_targets.1.view,
+            BlurDirection::Vertical,
+        );
+
+        self.compositor.render(
+            &mut encoder,
+            &self.low_res_targets.1,
+            &self.accumulator.view,
+            0.0,
+        );
+
         self.particle_renderer
-            .render(device, &mut encoder, self.blur_renderer.source());
-        self.blur_renderer.render(device, &mut encoder, dest, 1);
+            .render(device, &mut encoder, &self.particles_target.view);
+
+        self.compositor.render(
+            &mut encoder,
+            &self.particles_target,
+            &self.accumulator.view,
+            0.9,
+        );
+
+        self.compositor
+            .render(&mut encoder, &self.accumulator, &dest, 0.0);
 
         vec![encoder.finish()]
     }

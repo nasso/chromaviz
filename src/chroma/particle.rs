@@ -1,3 +1,4 @@
+use super::render_target::{RenderTarget, RenderTargetFamily};
 use glam::Vec2;
 use rand::distributions::{Distribution, Uniform as UniformDistribution};
 use std::time::Duration;
@@ -98,7 +99,7 @@ pub struct ParticleRenderer {
 impl ParticleRenderer {
     pub fn new(
         device: &wgpu::Device,
-        format: wgpu::TextureFormat,
+        family: &RenderTargetFamily,
         settings: ParticleSettings,
     ) -> Self {
         let vs_module =
@@ -159,7 +160,7 @@ impl ParticleRenderer {
             }),
             primitive_topology: wgpu::PrimitiveTopology::TriangleStrip,
             color_states: &[wgpu::ColorStateDescriptor {
-                format,
+                format: family.format,
                 color_blend: wgpu::BlendDescriptor {
                     src_factor: wgpu::BlendFactor::SrcAlpha,
                     dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
