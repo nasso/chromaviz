@@ -37,11 +37,11 @@ fn run(event_loop: EventLoop<()>, window: Window) {
         size.height,
         wgpu::TextureFormat::Bgra8UnormSrgb,
         ChromaSettings {
+            decay: 0.9,
             particles: ParticleSettings {
-                gravity: (0.0, -3.0).into(),
+                gravity: (0.0, -4.0).into(),
                 frequencies: 32,
                 frequencies_spread: 1.0,
-                max_particles: 10000,
                 particles_per_second: 2000,
                 angular_spread: 5.0,
                 velocity_spread: 0.1,

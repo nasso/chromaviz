@@ -1,7 +1,9 @@
-use super::render_target::{RenderTarget, RenderTargetFamily};
+use super::render_target::RenderTargetFamily;
 use glam::Vec2;
 use rand::distributions::{Distribution, Uniform as UniformDistribution};
 use std::time::Duration;
+
+const MAX_PARTICLES: u64 = 0x4000;
 
 #[derive(Debug, Clone)]
 struct Particle {
@@ -78,7 +80,6 @@ pub struct ParticleSettings {
     pub gravity: Vec2,
     pub frequencies: u64,
     pub frequencies_spread: f32,
-    pub max_particles: u64,
     pub particles_per_second: u64,
     pub angular_spread: f32,
     pub velocity_spread: f32,
@@ -86,7 +87,6 @@ pub struct ParticleSettings {
 }
 
 pub struct ParticleRenderer {
-    settings: ParticleSettings,
     render_pipeline: wgpu::RenderPipeline,
     bind_group: wgpu::BindGroup,
     staging_belt: wgpu::util::StagingBelt,
@@ -97,11 +97,7 @@ pub struct ParticleRenderer {
 }
 
 impl ParticleRenderer {
-    pub fn new(
-        device: &wgpu::Device,
-        family: &RenderTargetFamily,
-        settings: ParticleSettings,
-    ) -> Self {
+    pub fn new(device: &wgpu::Device, family: &RenderTargetFamily) -> Self {
         let vs_module =
             device.create_shader_module(wgpu::include_spirv!("shaders/particle.vert.spv"));
 
@@ -190,30 +186,29 @@ impl ParticleRenderer {
         let particle_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
             mapped_at_creation: false,
-            size: settings.max_particles * std::mem::size_of::<f32>() as u64 * 4,
+            size: MAX_PARTICLES * std::mem::size_of::<f32>() as u64 * 4,
             usage: wgpu::BufferUsage::VERTEX | wgpu::BufferUsage::COPY_DST,
         });
 
         let staging_belt = wgpu::util::StagingBelt::new(0x100);
 
         Self {
-            particle_system: ParticleSystem::new(settings.max_particles as usize),
+            particle_system: ParticleSystem::new(MAX_PARTICLES as usize),
             time_since_last_emit: Duration::from_secs(0),
             staging_belt,
             particle_buffer,
             uniform_buf,
             render_pipeline,
             bind_group,
-            settings,
         }
     }
 
-    fn gen_particles(&mut self, delta: Duration, freq_data: &[f32]) {
+    fn gen_particles(&mut self, delta: Duration, freq_data: &[f32], settings: &ParticleSettings) {
         let mut rng = rand::thread_rng();
-        let freq_dist: UniformDistribution<u64> = (0..self.settings.frequencies).into();
+        let freq_dist: UniformDistribution<u64> = (0..settings.frequencies).into();
         let spread_dist: UniformDistribution<f32> = (-0.5..0.5).into();
-        let size_dist: UniformDistribution<f32> = self.settings.size_range.clone().into();
-        let period = Duration::from_secs_f64(1.0 / self.settings.particles_per_second as f64);
+        let size_dist: UniformDistribution<f32> = settings.size_range.clone().into();
+        let period = Duration::from_secs_f64(1.0 / settings.particles_per_second as f64);
 
         self.time_since_last_emit += delta;
 
@@ -223,18 +218,17 @@ impl ParticleRenderer {
         // spawn new ones
         for i in 0..new_count {
             let freq = {
-                let freq =
-                    freq_dist.sample(&mut rng) as f32 / (self.settings.frequencies - 1) as f32;
-                let spread = spread_dist.sample(&mut rng) * self.settings.frequencies_spread;
+                let freq = freq_dist.sample(&mut rng) as f32 / (settings.frequencies - 1) as f32;
+                let spread = spread_dist.sample(&mut rng) * settings.frequencies_spread;
 
-                freq + spread / (self.settings.frequencies - 1) as f32
+                freq + spread / (settings.frequencies - 1) as f32
             };
             let newborn_age = delta - period.mul_f64(i as f64);
 
             let angle =
-                (90.0 + spread_dist.sample(&mut rng) * self.settings.angular_spread).to_radians();
-            let velocity = self.velocity_for(freq, self.settings.gravity, freq_data)
-                + spread_dist.sample(&mut rng) * self.settings.velocity_spread;
+                (90.0 + spread_dist.sample(&mut rng) * settings.angular_spread).to_radians();
+            let velocity = self.velocity_for(freq, settings.gravity, freq_data)
+                + spread_dist.sample(&mut rng) * settings.velocity_spread;
 
             let init_vel = (angle.cos() * velocity, angle.sin() * velocity).into();
 
@@ -243,9 +237,7 @@ impl ParticleRenderer {
                 hue: freq,
                 age: newborn_age,
                 init_vel,
-                lifetime: Duration::from_secs_f32(
-                    (-init_vel.y() / self.settings.gravity.y()).max(0.0),
-                ),
+                lifetime: Duration::from_secs_f32((-init_vel.y() / settings.gravity.y()).max(0.0)),
                 size: size_dist.sample(&mut rng),
             });
         }
@@ -277,9 +269,9 @@ impl ParticleRenderer {
         (2.0 * g.y().abs() * target).sqrt()
     }
 
-    pub fn update(&mut self, delta: Duration, freq_data: &[f32]) {
+    pub fn update(&mut self, delta: Duration, freq_data: &[f32], settings: &ParticleSettings) {
         // update the particle generators
-        self.gen_particles(delta, freq_data);
+        self.gen_particles(delta, freq_data, settings);
 
         // update the particle system
         self.particle_system.update(delta);
@@ -315,6 +307,7 @@ impl ParticleRenderer {
         device: &wgpu::Device,
         encoder: &mut wgpu::CommandEncoder,
         dest: &wgpu::TextureView,
+        settings: &ParticleSettings,
     ) {
         if !self.particle_system.is_empty() {
             {
@@ -331,7 +324,7 @@ impl ParticleRenderer {
                 );
 
                 for (i, particle) in self.particle_system.particles().enumerate() {
-                    let pos = particle.pos(self.settings.gravity);
+                    let pos = particle.pos(settings.gravity);
                     let size = {
                         let life_progress =
                             particle.age.as_secs_f32() / particle.lifetime.as_secs_f32();

@@ -14,9 +14,11 @@ use std::time::Duration;
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChromaSettings {
     pub particles: ParticleSettings,
+    pub decay: f64,
 }
 
 pub struct Chroma {
+    pub settings: ChromaSettings,
     render_target_family: RenderTargetFamily,
     particle_renderer: ParticleRenderer,
     blur_renderer: BlurRenderer,
@@ -35,8 +37,7 @@ impl Chroma {
         settings: ChromaSettings,
     ) -> Self {
         let render_target_family = RenderTargetFamily::new(device, format);
-        let particle_renderer =
-            ParticleRenderer::new(device, &render_target_family, settings.particles);
+        let particle_renderer = ParticleRenderer::new(device, &render_target_family);
         let blur_renderer = BlurRenderer::new(device, &render_target_family);
         let compositor = Compositor::new(device, &render_target_family);
 
@@ -47,6 +48,7 @@ impl Chroma {
             ),
             particles_target: render_target_family.create_target(device, width, height),
             accumulator: render_target_family.create_target(device, width, height),
+            settings,
             render_target_family,
             particle_renderer,
             blur_renderer,
@@ -55,7 +57,8 @@ impl Chroma {
     }
 
     pub fn update(&mut self, delta: Duration, data: &[f32]) {
-        self.particle_renderer.update(delta, data);
+        self.particle_renderer
+            .update(delta, data, &self.settings.particles);
     }
 }
 
@@ -99,14 +102,12 @@ impl Renderer for Chroma {
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
         self.blur_renderer.render(
-            device,
             &mut encoder,
             &self.accumulator,
             &self.low_res_targets.0.view,
             BlurDirection::Horizontal,
         );
         self.blur_renderer.render(
-            device,
             &mut encoder,
             &self.low_res_targets.0,
             &self.low_res_targets.1.view,
@@ -120,14 +121,18 @@ impl Renderer for Chroma {
             0.0,
         );
 
-        self.particle_renderer
-            .render(device, &mut encoder, &self.particles_target.view);
+        self.particle_renderer.render(
+            device,
+            &mut encoder,
+            &self.particles_target.view,
+            &self.settings.particles,
+        );
 
         self.compositor.render(
             &mut encoder,
             &self.particles_target,
             &self.accumulator.view,
-            0.9,
+            self.settings.decay,
         );
 
         self.compositor

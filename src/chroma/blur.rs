@@ -133,7 +133,6 @@ impl BlurRenderer {
 
     pub fn render(
         &mut self,
-        device: &wgpu::Device,
         encoder: &mut wgpu::CommandEncoder,
         source: &RenderTarget,
         dest_view: &wgpu::TextureView,
