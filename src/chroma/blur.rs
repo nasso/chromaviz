@@ -12,8 +12,7 @@ impl Uniforms {
 }
 
 pub struct BlurRenderer {
-    vert_render_pipeline: wgpu::RenderPipeline,
-    hori_render_pipeline: wgpu::RenderPipeline,
+    render_pipeline: wgpu::RenderPipeline,
     bind_group: wgpu::BindGroup,
     staging_belt: wgpu::util::StagingBelt,
     uniform_buf: wgpu::Buffer,
@@ -30,10 +29,7 @@ impl BlurRenderer {
         let swap_buffers = SwapBufferPair::new(device, width, height, format);
 
         let vs_module = device.create_shader_module(wgpu::include_spirv!("shaders/blur.vert.spv"));
-        let fs_module_vert =
-            device.create_shader_module(wgpu::include_spirv!("shaders/blur_vert.frag.spv"));
-        let fs_module_hori =
-            device.create_shader_module(wgpu::include_spirv!("shaders/blur_hori.frag.spv"));
+        let fs_module = device.create_shader_module(wgpu::include_spirv!("shaders/blur.frag.spv"));
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: None,
@@ -70,49 +66,43 @@ impl BlurRenderer {
             }],
         });
 
-        let create_render_pipeline = |fs| {
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: None,
-                layout: Some(&pipeline_layout),
-                vertex_stage: wgpu::ProgrammableStageDescriptor {
-                    module: &vs_module,
-                    entry_point: "main",
-                },
-                fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
-                    module: fs,
-                    entry_point: "main",
-                }),
-                rasterization_state: Some(wgpu::RasterizationStateDescriptor {
-                    front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: wgpu::CullMode::Back,
-                    ..Default::default()
-                }),
-                primitive_topology: wgpu::PrimitiveTopology::TriangleStrip,
-                color_states: &[wgpu::ColorStateDescriptor {
-                    format,
-                    color_blend: wgpu::BlendDescriptor::REPLACE,
-                    alpha_blend: wgpu::BlendDescriptor::REPLACE,
-                    write_mask: wgpu::ColorWrite::ALL,
-                }],
-                depth_stencil_state: None,
-                vertex_state: wgpu::VertexStateDescriptor {
-                    index_format: wgpu::IndexFormat::Uint16,
-                    vertex_buffers: &[],
-                },
-                sample_count: 1,
-                sample_mask: !0,
-                alpha_to_coverage_enabled: false,
-            })
-        };
-
-        let vert_render_pipeline = create_render_pipeline(&fs_module_vert);
-        let hori_render_pipeline = create_render_pipeline(&fs_module_hori);
+        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: None,
+            layout: Some(&pipeline_layout),
+            vertex_stage: wgpu::ProgrammableStageDescriptor {
+                module: &vs_module,
+                entry_point: "main",
+            },
+            fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
+                module: &fs_module,
+                entry_point: "main",
+            }),
+            rasterization_state: Some(wgpu::RasterizationStateDescriptor {
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: wgpu::CullMode::Back,
+                ..Default::default()
+            }),
+            primitive_topology: wgpu::PrimitiveTopology::TriangleStrip,
+            color_states: &[wgpu::ColorStateDescriptor {
+                format,
+                color_blend: wgpu::BlendDescriptor::REPLACE,
+                alpha_blend: wgpu::BlendDescriptor::REPLACE,
+                write_mask: wgpu::ColorWrite::ALL,
+            }],
+            depth_stencil_state: None,
+            vertex_state: wgpu::VertexStateDescriptor {
+                index_format: wgpu::IndexFormat::Uint16,
+                vertex_buffers: &[],
+            },
+            sample_count: 1,
+            sample_mask: !0,
+            alpha_to_coverage_enabled: false,
+        });
 
         let staging_belt = wgpu::util::StagingBelt::new(0x100);
 
         Self {
-            vert_render_pipeline,
-            hori_render_pipeline,
+            render_pipeline,
             bind_group,
             staging_belt,
             uniform_buf,
@@ -176,7 +166,7 @@ impl BlurRenderer {
                 depth_stencil_attachment: None,
             });
 
-            rpass.set_pipeline(&self.vert_render_pipeline);
+            rpass.set_pipeline(&self.render_pipeline);
             rpass.set_bind_group(0, &self.bind_group, &[]);
             rpass.set_bind_group(1, &self.swap_buffers.source.bind_group, &[]);
             rpass.draw(0..4, 0..1);
@@ -197,10 +187,10 @@ impl BlurRenderer {
                 depth_stencil_attachment: None,
             });
 
-            rpass.set_pipeline(&self.hori_render_pipeline);
+            rpass.set_pipeline(&self.render_pipeline);
             rpass.set_bind_group(0, &self.bind_group, &[]);
             rpass.set_bind_group(1, &self.swap_buffers.source.bind_group, &[]);
-            rpass.draw(0..4, 0..1);
+            rpass.draw(0..4, 1..2);
         }
 
         vec![encoder.finish()]

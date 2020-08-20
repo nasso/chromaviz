@@ -23,7 +23,7 @@ fn run(event_loop: EventLoop<()>, window: Window) {
 
     let (device, queue) = block_on(adapter.request_device(
         &wgpu::DeviceDescriptor {
-            features: wgpu::Features::MAPPABLE_PRIMARY_BUFFERS,
+            features: wgpu::Features::PUSH_CONSTANTS,
             limits: wgpu::Limits::default(),
             shader_validation: true,
         },
