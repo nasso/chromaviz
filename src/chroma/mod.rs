@@ -114,11 +114,10 @@ impl Renderer for Chroma {
             BlurDirection::Vertical,
         );
 
-        self.compositor.render(
+        self.compositor.render_solid(
             &mut encoder,
             &self.low_res_targets.1,
             &self.accumulator.view,
-            0.0,
         );
 
         self.particle_renderer.render(
@@ -128,7 +127,7 @@ impl Renderer for Chroma {
             &self.settings.particles,
         );
 
-        self.compositor.render(
+        self.compositor.render_trail(
             &mut encoder,
             &self.particles_target,
             &self.accumulator.view,
@@ -136,7 +135,7 @@ impl Renderer for Chroma {
         );
 
         self.compositor
-            .render(&mut encoder, &self.accumulator, &dest, 0.0);
+            .render_solid(&mut encoder, &self.accumulator, &dest);
 
         vec![encoder.finish()]
     }
