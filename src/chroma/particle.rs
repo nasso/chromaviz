@@ -1,4 +1,3 @@
-use crate::Renderer;
 use glam::Vec2;
 use rand::distributions::{Distribution, Uniform as UniformDistribution};
 use std::time::Duration;
@@ -284,21 +283,17 @@ impl ParticleRenderer {
         // update the particle system
         self.particle_system.update(delta);
     }
-}
 
-impl Renderer for ParticleRenderer {
-    fn resize(
+    pub fn resize(
         &mut self,
         device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
         width: u32,
         height: u32,
-    ) -> Vec<wgpu::CommandBuffer> {
-        let mut encoder =
-            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-
+    ) {
         self.staging_belt
             .write_buffer(
-                &mut encoder,
+                encoder,
                 &self.uniform_buf,
                 0,
                 wgpu::BufferSize::new(std::mem::size_of::<Uniforms>() as u64).unwrap(),
@@ -312,22 +307,18 @@ impl Renderer for ParticleRenderer {
             );
 
         self.staging_belt.finish();
-
-        vec![encoder.finish()]
     }
 
-    fn render(
+    pub fn render(
         &mut self,
         device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
         dest: &wgpu::TextureView,
-    ) -> Vec<wgpu::CommandBuffer> {
-        let mut encoder =
-            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-
+    ) {
         if !self.particle_system.is_empty() {
             {
                 let mut buf = self.staging_belt.write_buffer(
-                    &mut encoder,
+                    encoder,
                     &self.particle_buffer,
                     0,
                     wgpu::BufferSize::new(
@@ -380,7 +371,5 @@ impl Renderer for ParticleRenderer {
             );
             rpass.draw(0..4, 0..particle_count as u32);
         }
-
-        vec![encoder.finish()]
     }
 }

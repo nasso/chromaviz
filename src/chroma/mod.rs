@@ -1,6 +1,6 @@
 mod blur;
 mod particle;
-mod swap_buffer;
+mod render_target;
 
 use crate::Renderer;
 use blur::BlurRenderer;
@@ -28,7 +28,7 @@ impl Chroma {
     ) -> Self {
         Self {
             particle_renderer: ParticleRenderer::new(device, format, settings.particles),
-            blur_renderer: BlurRenderer::new(device, width, height, 0.25, format),
+            blur_renderer: BlurRenderer::new(device, width, height, 0.5, format),
         }
     }
 
@@ -44,11 +44,14 @@ impl Renderer for Chroma {
         width: u32,
         height: u32,
     ) -> Vec<wgpu::CommandBuffer> {
-        let mut commands = Vec::new();
+        let mut encoder =
+            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
-        commands.append(&mut self.particle_renderer.resize(device, width, height));
-        commands.append(&mut self.blur_renderer.resize(device, width, height, 0.25));
-        commands
+        self.particle_renderer
+            .resize(device, &mut encoder, width, height);
+        self.blur_renderer.resize(device, width, height, 0.5);
+
+        vec![encoder.finish()]
     }
 
     fn render(
@@ -56,14 +59,13 @@ impl Renderer for Chroma {
         device: &wgpu::Device,
         dest: &wgpu::TextureView,
     ) -> Vec<wgpu::CommandBuffer> {
-        let mut commands = Vec::new();
+        let mut encoder =
+            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
-        commands.append(
-            &mut self
-                .particle_renderer
-                .render(device, self.blur_renderer.source()),
-        );
-        commands.append(&mut self.blur_renderer.render(device, dest, 2));
-        commands
+        self.particle_renderer
+            .render(device, &mut encoder, self.blur_renderer.source());
+        self.blur_renderer.render(device, &mut encoder, dest, 1);
+
+        vec![encoder.finish()]
     }
 }

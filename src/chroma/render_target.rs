@@ -1,4 +1,4 @@
-pub struct SwapBuffer {
+pub struct RenderTarget {
     pub width: u32,
     pub height: u32,
     pub texture: wgpu::Texture,
@@ -6,7 +6,7 @@ pub struct SwapBuffer {
     pub bind_group: wgpu::BindGroup,
 }
 
-impl SwapBuffer {
+impl RenderTarget {
     pub fn new(
         device: &wgpu::Device,
         bind_group_layout: &wgpu::BindGroupLayout,
@@ -57,8 +57,8 @@ impl SwapBuffer {
 }
 
 pub struct SwapBufferPair {
-    pub source: SwapBuffer,
-    pub dest: SwapBuffer,
+    pub source: RenderTarget,
+    pub dest: RenderTarget,
     pub bind_group_layout: wgpu::BindGroupLayout,
     pub sampler: wgpu::Sampler,
     pub format: wgpu::TextureFormat,
@@ -104,8 +104,8 @@ impl SwapBufferPair {
         });
 
         Self {
-            source: SwapBuffer::new(device, &bind_group_layout, &sampler, width, height, format),
-            dest: SwapBuffer::new(device, &bind_group_layout, &sampler, width, height, format),
+            source: RenderTarget::new(device, &bind_group_layout, &sampler, width, height, format),
+            dest: RenderTarget::new(device, &bind_group_layout, &sampler, width, height, format),
             bind_group_layout,
             sampler,
             format,
@@ -117,7 +117,7 @@ impl SwapBufferPair {
     }
 
     pub fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {
-        self.source = SwapBuffer::new(
+        self.source = RenderTarget::new(
             device,
             &self.bind_group_layout,
             &self.sampler,
@@ -126,7 +126,7 @@ impl SwapBufferPair {
             self.format,
         );
 
-        self.dest = SwapBuffer::new(
+        self.dest = RenderTarget::new(
             device,
             &self.bind_group_layout,
             &self.sampler,

@@ -1,4 +1,4 @@
-use super::swap_buffer::SwapBufferPair;
+use super::render_target::SwapBufferPair;
 
 #[derive(Debug, Clone)]
 struct Uniforms {
@@ -120,34 +120,24 @@ impl BlurRenderer {
         &self.swap_buffers.source.view
     }
 
-    pub fn resize(
-        &mut self,
-        device: &wgpu::Device,
-        width: u32,
-        height: u32,
-        scale: f32,
-    ) -> Vec<wgpu::CommandBuffer> {
+    pub fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32, scale: f32) {
         self.swap_buffers.resize(
             device,
             (width as f32 * scale) as u32,
             (height as f32 * scale) as u32,
         );
-
-        Vec::new()
     }
 
     pub fn render(
         &mut self,
         device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
         dest: &wgpu::TextureView,
         passes: u64,
-    ) -> Vec<wgpu::CommandBuffer> {
-        let mut encoder =
-            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-
+    ) {
         self.staging_belt
             .write_buffer(
-                &mut encoder,
+                encoder,
                 &self.uniform_buf,
                 0,
                 wgpu::BufferSize::new(std::mem::size_of::<Uniforms>() as u64).unwrap(),
@@ -214,7 +204,5 @@ impl BlurRenderer {
                 self.swap_buffers.swap();
             }
         }
-
-        vec![encoder.finish()]
     }
 }
