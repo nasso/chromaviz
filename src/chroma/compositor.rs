@@ -1,7 +1,7 @@
 use super::render_target::{RenderTarget, RenderTargetFamily};
 
 pub struct Compositor {
-    trail_pipeline: wgpu::RenderPipeline,
+    transparent_pipeline: wgpu::RenderPipeline,
     solid_pipeline: wgpu::RenderPipeline,
 }
 
@@ -18,7 +18,7 @@ impl Compositor {
             push_constant_ranges: &[],
         });
 
-        let trail_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        let transparent_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: None,
             layout: Some(&pipeline_layout),
             vertex_stage: wgpu::ProgrammableStageDescriptor {
@@ -38,12 +38,12 @@ impl Compositor {
             color_states: &[wgpu::ColorStateDescriptor {
                 format: family.format,
                 color_blend: wgpu::BlendDescriptor {
-                    src_factor: wgpu::BlendFactor::SrcAlpha,
-                    dst_factor: wgpu::BlendFactor::BlendColor,
+                    src_factor: wgpu::BlendFactor::BlendColor,
+                    dst_factor: wgpu::BlendFactor::Zero,
                     operation: wgpu::BlendOperation::Add,
                 },
                 alpha_blend: wgpu::BlendDescriptor {
-                    src_factor: wgpu::BlendFactor::One,
+                    src_factor: wgpu::BlendFactor::BlendColor,
                     dst_factor: wgpu::BlendFactor::Zero,
                     operation: wgpu::BlendOperation::Add,
                 },
@@ -93,17 +93,17 @@ impl Compositor {
         });
 
         Self {
-            trail_pipeline,
+            transparent_pipeline,
             solid_pipeline,
         }
     }
 
-    pub fn render_trail(
+    pub fn render_transparent(
         &mut self,
         encoder: &mut wgpu::CommandEncoder,
         source: &RenderTarget,
         dest_view: &wgpu::TextureView,
-        trail: f64,
+        opacity: f64,
     ) {
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
@@ -117,12 +117,12 @@ impl Compositor {
             depth_stencil_attachment: None,
         });
 
-        rpass.set_pipeline(&self.trail_pipeline);
+        rpass.set_pipeline(&self.transparent_pipeline);
         rpass.set_blend_color(wgpu::Color {
-            r: trail,
-            g: trail,
-            b: trail,
-            a: trail,
+            r: opacity,
+            g: opacity,
+            b: opacity,
+            a: opacity,
         });
         rpass.set_bind_group(0, &source.bind_group, &[]);
         rpass.draw(0..4, 0..1);

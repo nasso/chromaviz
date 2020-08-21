@@ -307,6 +307,7 @@ impl ParticleRenderer {
         device: &wgpu::Device,
         encoder: &mut wgpu::CommandEncoder,
         dest: &wgpu::TextureView,
+        clear: bool,
         settings: &ParticleSettings,
     ) {
         if !self.particle_system.is_empty() {
@@ -349,7 +350,11 @@ impl ParticleRenderer {
                     attachment: dest,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        load: if clear {
+                            wgpu::LoadOp::Clear(wgpu::Color::BLACK)
+                        } else {
+                            wgpu::LoadOp::Load
+                        },
                         store: true,
                     },
                 }],

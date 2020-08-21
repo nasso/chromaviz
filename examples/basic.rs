@@ -43,7 +43,7 @@ fn run(event_loop: EventLoop<()>, window: Window) {
                 frequencies: 32,
                 frequencies_spread: 1.0,
                 particles_per_second: 2000,
-                angular_spread: 5.0,
+                angular_spread: 2.0,
                 velocity_spread: 0.1,
                 size_range: 4.0..6.0,
             },

@@ -24,7 +24,6 @@ pub struct Chroma {
     blur_renderer: BlurRenderer,
     compositor: Compositor,
     low_res_targets: (RenderTarget, RenderTarget),
-    particles_target: RenderTarget,
     accumulator: RenderTarget,
 }
 
@@ -46,7 +45,6 @@ impl Chroma {
                 render_target_family.create_target(device, width / 2, height / 2),
                 render_target_family.create_target(device, width / 2, height / 2),
             ),
-            particles_target: render_target_family.create_target(device, width, height),
             accumulator: render_target_family.create_target(device, width, height),
             settings,
             render_target_family,
@@ -81,11 +79,8 @@ impl Renderer for Chroma {
             self.render_target_family
                 .create_target(device, width / 2, height / 2),
             self.render_target_family
-                .create_target(device, width / 2, height / 2),
+                .create_target(device, width, height),
         );
-        self.particles_target = self
-            .render_target_family
-            .create_target(device, width, height);
         self.accumulator = self
             .render_target_family
             .create_target(device, width, height);
@@ -114,24 +109,19 @@ impl Renderer for Chroma {
             BlurDirection::Vertical,
         );
 
-        self.compositor.render_solid(
+        self.compositor.render_transparent(
             &mut encoder,
             &self.low_res_targets.1,
             &self.accumulator.view,
+            self.settings.decay,
         );
 
         self.particle_renderer.render(
             device,
             &mut encoder,
-            &self.particles_target.view,
-            &self.settings.particles,
-        );
-
-        self.compositor.render_trail(
-            &mut encoder,
-            &self.particles_target,
             &self.accumulator.view,
-            self.settings.decay,
+            false,
+            &self.settings.particles,
         );
 
         self.compositor
