@@ -55,6 +55,15 @@ fn main() {
         },
     );
 
+    // initialize size
+    {
+        let commands = renderer.resize(&device, size.width, size.height);
+
+        if !commands.is_empty() {
+            queue.submit(commands);
+        }
+    }
+
     let mut sc_desc = wgpu::SwapChainDescriptor {
         usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
         format: wgpu::TextureFormat::Bgra8UnormSrgb,
