@@ -237,7 +237,7 @@ impl ParticleRenderer {
                 hue: freq,
                 age: newborn_age,
                 init_vel,
-                lifetime: Duration::from_secs_f32((-init_vel.y() / settings.gravity.y()).max(0.0)),
+                lifetime: Duration::from_secs_f32((-init_vel.y / settings.gravity.y).max(0.0)),
                 size: size_dist.sample(&mut rng),
             });
         }
@@ -266,7 +266,7 @@ impl ParticleRenderer {
         // v² / 2 = gH
         // v² = 2gH
         // v = sqrt(2gH)
-        (2.0 * g.y().abs() * target).sqrt()
+        (2.0 * g.y.abs() * target).sqrt()
     }
 
     pub fn update(&mut self, delta: Duration, freq_data: &[f32], settings: &ParticleSettings) {
@@ -333,8 +333,8 @@ impl ParticleRenderer {
                     };
                     let addr = std::mem::size_of::<f32>() * 4 * i;
 
-                    buf[addr + 0..addr + 4].copy_from_slice(&pos.x().to_ne_bytes());
-                    buf[addr + 4..addr + 8].copy_from_slice(&pos.y().to_ne_bytes());
+                    buf[addr + 0..addr + 4].copy_from_slice(&pos.x.to_ne_bytes());
+                    buf[addr + 4..addr + 8].copy_from_slice(&pos.y.to_ne_bytes());
                     buf[addr + 8..addr + 12].copy_from_slice(&size.to_ne_bytes());
                     buf[addr + 12..addr + 16].copy_from_slice(&particle.hue.to_ne_bytes());
                 }

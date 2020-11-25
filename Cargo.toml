@@ -8,11 +8,11 @@ edition = "2018"
 
 [dependencies]
 wgpu = "0.6"
-glam = "0.9"
+glam = "0.10"
 rand = "0.7"
 futures = "0.3"
 async-trait = "0.1"
-bytemuck = "1.3"
+bytemuck = "1.4"
 
 [dev-dependencies]
-winit = "0.22"
+winit = "0.23"
