@@ -1,5 +1,5 @@
 [package]
-name = "chromaplay"
+name = "chroma"
 version = "0.1.0"
 authors = ["nasso <nassomails@gmail.com>"]
 edition = "2018"
@@ -8,6 +8,11 @@ edition = "2018"
 
 [dependencies]
 chromaviz = { path = "chromaviz" }
+chromaplay = { path = "chromaplay" }
 winit = "0.23"
 wgpu = "0.6"
 futures = "0.3"
+
+[dependencies.native-dialog]
+version = "0.4"
+features = ["windows_dpi_awareness", "windows_visual_styles"]

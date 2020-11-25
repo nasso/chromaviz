@@ -1,3 +1,7 @@
+use std::{env::args, path::PathBuf};
+
+use native_dialog::{Dialog, OpenSingleFile};
+
 use {
     chromaviz::prelude::*,
     futures::executor::block_on,
@@ -8,7 +12,7 @@ use {
     },
 };
 
-fn main() {
+fn viz() {
     let event_loop = EventLoop::new();
     let window = winit::window::WindowBuilder::new()
         .with_title("ChromaViz")
@@ -132,4 +136,18 @@ fn main() {
             _ => {}
         }
     });
+}
+
+fn main() {
+    let file = args().nth(1).map(|file| PathBuf::from(file)).or_else(|| {
+        let dialog = OpenSingleFile {
+            dir: None,
+            filter: Some(&["wav"]),
+        };
+
+        dialog.show().ok().flatten()
+    });
+
+    println!("playing {:?}", file);
+    viz();
 }
